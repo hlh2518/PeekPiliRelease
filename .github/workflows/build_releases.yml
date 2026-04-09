@@ -1,4 +1,4 @@
-name: 构建 Android 和 Windows (分开版本)
+name: 智能检测并构建
 
 on:
   workflow_dispatch:
@@ -13,29 +13,78 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
+      - name: 查找 Flutter 项目路径
+        id: find_project
+        run: |
+          # 查找 pubspec.yaml 文件
+          PROJECT_PATH=$(find . -name "pubspec.yaml" -not -path "*/\.*" -exec dirname {} \; | head -1)
+          if [ -z "$PROJECT_PATH" ]; then
+            echo "错误: 找不到 pubspec.yaml 文件"
+            exit 1
+          fi
+          echo "path=$PROJECT_PATH" >> $GITHUB_OUTPUT
+          echo "找到 Flutter 项目: $PROJECT_PATH"
+      
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
-      - run: flutter pub get
-      - run: flutter build apk --release
+      
+      - name: 获取依赖
+        run: flutter pub get
+        working-directory: ${{ steps.find_project.outputs.path }}
+      
+      - name: 构建 APK
+        run: flutter build apk --release
+        working-directory: ${{ steps.find_project.outputs.path }}
+      
+      - name: 复制 APK 到根目录
+        run: |
+          cp ${{ steps.find_project.outputs.path }}/build/app/outputs/flutter-apk/app-release.apk .
+      
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: app-release.apk
 
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      
+      - name: 查找 Flutter 项目路径
+        id: find_project
+        shell: bash
+        run: |
+          PROJECT_PATH=$(find . -name "pubspec.yaml" -not -path "*/\.*" -exec dirname {} \; | head -1)
+          if [ -z "$PROJECT_PATH" ]; then
+            echo "错误: 找不到 pubspec.yaml 文件"
+            exit 1
+          fi
+          echo "path=$PROJECT_PATH" >> $GITHUB_OUTPUT
+          echo "找到 Flutter 项目: $PROJECT_PATH"
+      
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
-      - run: flutter config --enable-windows-desktop
-      - run: flutter pub get
-      - run: flutter build windows --release
+      
+      - name: 启用 Windows 支持
+        run: flutter config --enable-windows-desktop
+      
+      - name: 获取依赖
+        run: flutter pub get
+        working-directory: ${{ steps.find_project.outputs.path }}
+      
+      - name: 构建 Windows
+        run: flutter build windows --release
+        working-directory: ${{ steps.find_project.outputs.path }}
+      
       - name: 打包 Windows 文件
+        shell: pwsh
         run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath windows-x64-release.zip
+          $projectPath = "${{ steps.find_project.outputs.path }}"
+          Compress-Archive -Path "$projectPath/build/windows/x64/runner/Release/*" -DestinationPath windows-x64-release.zip
+      
       - uses: actions/upload-artifact@v4
         with:
           name: windows-zip
@@ -56,6 +105,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
