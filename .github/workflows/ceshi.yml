@@ -1,0 +1,23 @@
+name: 诊断项目结构
+
+on: workflow_dispatch
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 查看项目结构
+        run: |
+          echo "=== 根目录结构 ==="
+          ls -la
+          
+          echo "=== 查找所有 pubspec.yaml ==="
+          find . -name "pubspec.yaml" 2>/dev/null || echo "未找到 pubspec.yaml"
+          
+          echo "=== 查找所有 Dart 文件 ==="
+          find . -name "*.dart" | head -20
+          
+          echo "=== 查看是否有 lib 目录 ==="
+          ls -la lib/ 2>/dev/null || echo "没有 lib 目录"
